@@ -1,0 +1,61 @@
+name: JobRadar
+
+# Fase inicial: somente execucao manual. Depois de validar o primeiro run em
+# nuvem, reativaremos o schedule a cada 3h em um minuto fora do topo da hora.
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: jobradar-automotivo-cycle
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  buscar-vagas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v6
+
+      - name: Configurar Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Rodar JobRadar Automotivo
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python main.py --perfil brasil internacional --once
+
+      - name: Salvar vagas já vistas
+        run: |
+          git config user.name "jobradar-bot"
+          git config user.email "jobradar-bot@users.noreply.github.com"
+
+          git add data/jobs.db
+          if git diff --cached --quiet; then
+            echo "Nada novo pra commitar."
+            exit 0
+          fi
+
+          git commit -m "chore: atualiza vagas vistas [skip ci]"
+          n=0
+          until git push; do
+            n=$((n + 1))
+            if [ "$n" -ge 5 ]; then
+              echo "Push falhou depois de 5 tentativas."
+              exit 1
+            fi
+            git fetch origin main
+            git rebase origin/main -X theirs || git rebase --abort
+            sleep $((RANDOM % 5 + 1))
+          done

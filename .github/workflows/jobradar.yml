@@ -4,6 +4,8 @@ name: JobRadar
 # nuvem, reativaremos o schedule a cada 3h em um minuto fora do topo da hora.
 on:
   workflow_dispatch: {}
+  schedule:
+    - cron: "47 */3 * * *"
 
 concurrency:
   group: jobradar-automotivo-cycle
